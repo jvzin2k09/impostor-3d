@@ -12,13 +12,49 @@
 <body>
     <canvas id="c"></canvas>
     <div id="menu" class="card">
-        <h1>🕵️ Impostor</h1>
-        <p>Descubra quem é o infiltrado!</p>
+        <header class="menu-heading">
+            <h1>🕵️ Impostor</h1>
+            <p>Descubra quem é o infiltrado!</p>
+        </header>
+        <div class="profile-strip">
+            <div class="profile-stat"><small>MOEDAS</small><span>🪙 <b id="menu-coins">0</b></span></div>
+            <div class="profile-stat"><small>VITÓRIAS</small><span>🏆 <b id="menu-wins">0</b></span></div>
+            <div class="profile-stat profile-title"><small>TÍTULO</small><span id="menu-title">Sem título</span></div>
+        </div>
         <input id="nm" placeholder="Seu nome" maxlength="12">
-        <button id="mk">Criar sala</button>
-        <div class="row"><input id="cd" placeholder="Código" maxlength="4" style="text-transform:uppercase"><button
-                id="jn" class="alt">Entrar</button></div>
-        <p>Modo offline com bots. Online em breve!</p>
+        <button id="mk" class="menu-play">▶ Criar partida</button>
+        <section class="join-section">
+            <label for="cd">Entrar com código</label>
+            <div class="row"><input id="cd" placeholder="CÓDIGO" maxlength="4" style="text-transform:uppercase"><button
+                    id="jn" class="alt">Entrar</button></div>
+        </section>
+        <div class="menu-actions">
+            <button id="open-inventory" class="alt menu-tile"><span>🎒</span>Inventário</button>
+            <button id="open-store" class="menu-tile"><span>🛍️</span>Loja</button>
+        </div>
+        <footer class="menu-footer">
+            <p>Ganhe moedas jogando, acertando votações e vencendo.</p>
+            <small>Modo offline com bots · Online em breve</small>
+        </footer>
+    </div>
+    <div id="inventory" class="card panel-card" hidden>
+        <h2>🎒 Inventário</h2>
+        <p>Suas cadeiras e títulos desbloqueados.</p>
+        <section>
+            <h3>🪑 Cadeiras</h3>
+            <div id="owned-chairs" class="item-list"></div>
+        </section>
+        <section>
+            <h3>🏅 Títulos</h3>
+            <div id="owned-titles" class="item-list"></div>
+        </section>
+        <button id="inventory-back" class="alt">Voltar ao menu</button>
+    </div>
+    <div id="store" class="card panel-card" hidden>
+        <h2>🛍️ Loja</h2>
+        <p>Saldo: 🪙 <b id="store-coins">0</b></p>
+        <div id="store-items" class="item-list"></div>
+        <button id="store-back" class="alt">Voltar ao menu</button>
     </div>
     <div id="lobby" class="card" hidden>
         <p>Código da sala</p>
@@ -29,12 +65,22 @@
     </div>
     <div id="hud" hidden>
         <div>
-            <div id="top"><span id="st"></span><span id="tm"></span></div>
+            <div id="top"><span id="st"></span><button id="cam-reset" type="button" title="Voltar para trás do seu personagem" aria-label="Centralizar câmera">↻</button><span id="tm"></span></div>
             <div id="word"></div>
+            <div id="cam-tip"><span class="desktop-tip">Arraste para orbitar · Shift + arraste para mover · roda para zoom</span><span class="touch-tip">Arraste para orbitar · pinça para zoom</span></div>
         </div>
         <div id="bot">
             <div id="log"></div>
             <div id="act"></div>
+        </div>
+    </div>
+    <div id="reveal" hidden aria-live="polite">
+        <div class="reveal-card">
+            <div id="reveal-icon" class="reveal-icon">🎴</div>
+            <p id="reveal-kicker">SORTEIO DO PAPEL</p>
+            <h2 id="reveal-title">Embaralhando…</h2>
+            <p id="reveal-detail"></p>
+            <button id="reveal-ok" type="button">Entendi, começar!</button>
         </div>
     </div>
     <div id="end" class="card" hidden>

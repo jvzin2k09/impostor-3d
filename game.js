@@ -5,7 +5,88 @@ let P = [],
   theme,
   code = "",
   nb = 5,
-  gameTextInput = null;
+  gameTextInput = null,
+  lastHumanVote = null;
+
+const PROFILE_KEY = "impostor3d.profile.v1";
+const CHAIR_CATALOG = [
+  { id: "classic", name: "Clássica", price: 0, color: "#4f46e5", description: "Sua cadeira original." },
+  { id: "ocean", name: "Azul oceano", price: 45, color: "#168ac2", description: "Uma cadeira azul para sua próxima partida." },
+  { id: "gold", name: "Dourada", price: 90, color: "#d9a928", description: "Um assento digno de um campeão." },
+  { id: "rainbow", name: "Arco-íris", price: 150, color: "rainbow", description: "Cadeira especial com cores vibrantes." },
+];
+const TITLE_CATALOG = [
+  { id: "first_win", name: "Primeira Vitória", description: "Vença sua primeira partida.", unlock: (p) => p.wins >= 1 },
+  { id: "experienced", name: "Experiente", description: "Vença 5 partidas.", unlock: (p) => p.wins >= 5 },
+  { id: "room_legend", name: "Lenda da Sala", description: "Vença 10 partidas.", unlock: (p) => p.wins >= 10 },
+  { id: "bluff_master", name: "Mestre do Blefe", description: "Vença 3 partidas como impostor.", unlock: (p) => p.impostorWins >= 3 },
+  { id: "detective", name: "Detetive", description: "Esteja na equipe que elimina o impostor 3 vezes.", unlock: (p) => p.caughtImpostors >= 3 },
+  { id: "survivor", name: "Sobrevivente", description: "Vença 3 partidas como inocente sem ser eliminado.", unlock: (p) => p.survivorWins >= 3 },
+];
+const EMPTY_PROFILE = {
+  coins: 0,
+  wins: 0,
+  games: 0,
+  impostorWins: 0,
+  caughtImpostors: 0,
+  survivorWins: 0,
+  totalRounds: 0,
+  selectedChair: "classic",
+  ownedChairs: ["classic"],
+  selectedTitle: "",
+  unlockedTitles: [],
+};
+function readProfile() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PROFILE_KEY) || "{}");
+    const p = { ...EMPTY_PROFILE, ...saved };
+    p.coins = Math.max(0, Number(p.coins) || 0);
+    ["wins", "games", "impostorWins", "caughtImpostors", "survivorWins", "totalRounds"].forEach((k) => {
+      p[k] = Math.max(0, Number(p[k]) || 0);
+    });
+    p.ownedChairs = Array.isArray(p.ownedChairs)
+      ? [...new Set(["classic", ...p.ownedChairs.filter((id) => CHAIR_CATALOG.some((c) => c.id === id))])]
+      : ["classic"];
+    p.unlockedTitles = Array.isArray(p.unlockedTitles)
+      ? [...new Set(p.unlockedTitles.filter((id) => TITLE_CATALOG.some((t) => t.id === id)))]
+      : [];
+    if (!p.ownedChairs.includes(p.selectedChair)) p.selectedChair = "classic";
+    if (!p.unlockedTitles.includes(p.selectedTitle)) p.selectedTitle = "";
+    return p;
+  } catch {
+    return { ...EMPTY_PROFILE, ownedChairs: ["classic"], unlockedTitles: [] };
+  }
+}
+let profile = readProfile();
+function saveProfile() {
+  try {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  } catch {
+    // The game remains playable if browser storage is unavailable.
+  }
+  refreshProfileUI();
+}
+function refreshProfileUI() {
+  const coins = $("#menu-coins");
+  if (coins) coins.textContent = profile.coins;
+  const wins = $("#menu-wins");
+  if (wins) wins.textContent = profile.wins;
+  const storeCoins = $("#store-coins");
+  if (storeCoins) storeCoins.textContent = profile.coins;
+  const title = $("#menu-title");
+  if (title) title.textContent = TITLE_CATALOG.find((t) => t.id === profile.selectedTitle)?.name || "Sem título equipado";
+}
+function unlockTitles() {
+  const newlyUnlocked = [];
+  TITLE_CATALOG.forEach((t) => {
+    if (t.unlock(profile) && !profile.unlockedTitles.includes(t.id)) {
+      profile.unlockedTitles.push(t.id);
+      newlyUnlocked.push(t.name);
+    }
+  });
+  return newlyUnlocked;
+}
+unlockTitles();
 
 // Some embedded/mobile browsers keep keyboard focus on the canvas even when
 // the visible clue field has focus. Route ordinary typing to the active clue.
@@ -45,11 +126,13 @@ document.addEventListener(
   true,
 );
 const show = (id) =>
-  ["menu", "lobby", "hud", "end"].forEach((i) => {
+  ["menu", "inventory", "store", "lobby", "hud", "end"].forEach((i) => {
     $("#" + i).hidden = i !== id;
-    // During a round, the full-screen canvas must not capture taps intended
-    // for the dynamically-created text fields and buttons in the HUD.
-    if (i === "hud") $("#c").style.pointerEvents = id === "hud" ? "none" : "auto";
+    if (i === "hud") {
+      // The canvas remains interactive through empty HUD areas for camera control.
+      $("#c").style.pointerEvents = "auto";
+      focusCamera(id === "hud" ? me : null);
+    }
   });
 const status = (t) => ($("#st").textContent = t),
   timer = (t) => ($("#tm").textContent = t);
@@ -65,11 +148,149 @@ function log(who, txt, cls) {
   $("#log").append(d);
   $("#log").scrollTop = 1e9;
 }
+function itemCard({ icon, name, description, action, actionText, disabled, color }) {
+  const card = document.createElement("div");
+  card.className = "item-card";
+  const badge = document.createElement("div");
+  badge.className = "item-icon";
+  badge.textContent = icon;
+  badge.style.setProperty(
+    "--swatch",
+    color === "rainbow"
+      ? "linear-gradient(135deg, #fa4c74, #ffb82e, #50bd73, #438fe5, #9d62cf)"
+      : color || "var(--ac)",
+  );
+  const copy = document.createElement("div");
+  copy.className = "item-copy";
+  const label = document.createElement("strong");
+  label.textContent = name;
+  const detail = document.createElement("small");
+  detail.textContent = description;
+  copy.append(label, detail);
+  const button = document.createElement("button");
+  button.textContent = actionText;
+  button.disabled = !!disabled;
+  if (action) button.onclick = action;
+  card.append(badge, copy, button);
+  return card;
+}
+function refreshEquippedPlayer() {
+  if (!P.length) return;
+  P[0].chairStyle = profile.selectedChair;
+  P[0].title = TITLE_CATALOG.find((t) => t.id === profile.selectedTitle)?.name || "";
+  build(P);
+}
+function renderInventory() {
+  const chairs = $("#owned-chairs");
+  const titles = $("#owned-titles");
+  chairs.innerHTML = "";
+  titles.innerHTML = "";
+  CHAIR_CATALOG.filter((c) => profile.ownedChairs.includes(c.id)).forEach((chair) => {
+    const selected = profile.selectedChair === chair.id;
+    chairs.append(itemCard({
+      icon: "🪑",
+      name: chair.name,
+      description: chair.description,
+      color: chair.color,
+      actionText: selected ? "Equipado" : "Usar",
+      disabled: selected,
+      action: () => {
+        profile.selectedChair = chair.id;
+        saveProfile();
+        refreshEquippedPlayer();
+        renderInventory();
+      },
+    }));
+  });
+  titles.append(itemCard({
+    icon: "🏷️",
+    name: "Sem título",
+    description: "Não exibe um título junto ao seu nome.",
+    actionText: profile.selectedTitle ? "Usar" : "Equipado",
+    disabled: !profile.selectedTitle,
+    action: () => {
+      profile.selectedTitle = "";
+      saveProfile();
+      refreshEquippedPlayer();
+      renderInventory();
+    },
+  }));
+  TITLE_CATALOG.forEach((title) => {
+    const unlocked = profile.unlockedTitles.includes(title.id);
+    const selected = profile.selectedTitle === title.id;
+    titles.append(itemCard({
+      icon: unlocked ? "🏅" : "🔒",
+      name: title.name,
+      description: unlocked ? title.description : `${title.description} · ${titleProgress(title.id)}`,
+      actionText: !unlocked ? "Bloqueado" : selected ? "Equipado" : "Usar",
+      disabled: !unlocked || selected,
+      action: () => {
+        profile.selectedTitle = title.id;
+        saveProfile();
+        refreshEquippedPlayer();
+        renderInventory();
+      },
+    }));
+  });
+}
+function titleProgress(id) {
+  const progress = {
+    first_win: `${profile.wins}/1 vitórias`,
+    experienced: `${Math.min(profile.wins, 5)}/5 vitórias`,
+    room_legend: `${Math.min(profile.wins, 10)}/10 vitórias`,
+    bluff_master: `${Math.min(profile.impostorWins, 3)}/3 vitórias como impostor`,
+    detective: `${Math.min(profile.caughtImpostors, 3)}/3 impostores eliminados`,
+    survivor: `${Math.min(profile.survivorWins, 3)}/3 vitórias sobrevivendo`,
+  };
+  return progress[id] || "Ainda bloqueado";
+}
+function renderStore() {
+  const list = $("#store-items");
+  list.innerHTML = "";
+  $("#store-coins").textContent = profile.coins;
+  CHAIR_CATALOG.filter((c) => c.id !== "classic").forEach((chair) => {
+    const owned = profile.ownedChairs.includes(chair.id);
+    const selected = profile.selectedChair === chair.id;
+    const actionText = selected ? "Equipado" : owned ? "Usar" : `🪙 ${chair.price}`;
+    list.append(itemCard({
+      icon: "🪑",
+      name: chair.name,
+      description: chair.description,
+      color: chair.color,
+      actionText,
+      disabled: selected || (!owned && profile.coins < chair.price),
+      action: () => {
+        if (!owned) {
+          profile.coins -= chair.price;
+          profile.ownedChairs.push(chair.id);
+        }
+        profile.selectedChair = chair.id;
+        saveProfile();
+        refreshEquippedPlayer();
+        renderStore();
+      },
+    }));
+  });
+}
+function openInventory() {
+  renderInventory();
+  show("inventory");
+}
+function openStore() {
+  renderStore();
+  show("store");
+}
 function mkPlayers(n) {
   const nm = ($("#nm").value.trim() || "Você").slice(0, 12),
     cs = [...COLS].sort(() => Math.random() - 0.5);
   P = [
-    { name: nm, human: true, color: cs[0] },
+    {
+      name: nm,
+      human: true,
+      color: cs[0],
+      chairStyle: profile.selectedChair,
+      title: TITLE_CATALOG.find((t) => t.id === profile.selectedTitle)?.name || "",
+    },
     ...NAMES.sort(() => Math.random() - 0.5)
       .slice(0, n)
       .map((x, i) => ({ name: x, human: false, color: cs[i + 1] })),
@@ -115,6 +336,11 @@ $("#bs").oninput = (e) => {
   nb = +e.target.value;
   lobby();
 };
+$("#open-inventory").onclick = openInventory;
+$("#open-store").onclick = openStore;
+$("#inventory-back").onclick = () => show("menu");
+$("#store-back").onclick = () => show("menu");
+$("#cam-reset").onclick = () => focusCamera(me);
 $("#bk").onclick = () => {
   show("menu");
 };
@@ -128,6 +354,7 @@ $("#ag").onclick = () => {
   mkPlayers(nb);
   play();
 };
+refreshProfileUI();
 function ask(ph, btn, max = 24) {
   return new Promise((res) => {
     const a = $("#act");
@@ -300,6 +527,7 @@ async function vote() {
     : sleep(2500).then(() => null);
   timer("");
   pv = await hv;
+  lastHumanVote = pv;
   $("#act").innerHTML = "";
   const vs = new Map();
   al.forEach((b) => {
@@ -324,7 +552,47 @@ async function vote() {
     return top[0][0];
   return null;
 }
+async function revealRole() {
+  const overlay = $("#reveal");
+  const icon = $("#reveal-icon");
+  const title = $("#reveal-title");
+  const detail = $("#reveal-detail");
+  const button = $("#reveal-ok");
+  overlay.hidden = false;
+  button.hidden = true;
+
+  for (const face of ["🎴", "🔎", "🎴"]) {
+    icon.textContent = face;
+    icon.style.animation = "none";
+    void icon.offsetWidth;
+    icon.style.animation = "";
+    title.textContent = "Sorteando seu papel…";
+    detail.textContent = "Os papéis estão sendo distribuídos.";
+    await sleep(550);
+  }
+
+  icon.textContent = me.imp ? "🕵️" : "🟢";
+  icon.className = "reveal-icon " + (me.imp ? "is-impostor" : "is-innocent");
+  icon.style.animation = "none";
+  void icon.offsetWidth;
+  icon.style.animation = "";
+  title.textContent = me.imp ? "Você é o IMPOSTOR!" : "Você é INOCENTE!";
+  detail.textContent = me.imp
+    ? `Descubra a palavra sem ser descoberto. Tema: ${theme}.`
+    : `Sua palavra é ${W.w.toUpperCase()} · Tema: ${theme}.`;
+  button.hidden = false;
+
+  await new Promise((resolve) => {
+    button.onclick = () => {
+      overlay.hidden = true;
+      button.onclick = null;
+      resolve();
+    };
+  });
+}
 async function play() {
+  let roundsPlayed = 0;
+  let correctReads = 0;
   const th0 = pick(Object.keys(TH));
   theme = th0;
   W = pick(TH[theme]);
@@ -344,13 +612,15 @@ async function play() {
     ? `🕵️ Você é o IMPOSTOR · Tema: ${theme}`
     : `Tema: ${theme} · Palavra: ${W.w.toUpperCase()}`;
   status("Sala " + code);
-  await btns([["Entendi, começar!", 1]]);
+  await revealRole();
   for (let r = 1; ; r++) {
     const al = P.filter((p) => p.alive),
       st = Math.floor(Math.random() * al.length);
     for (let k = 0; k < al.length; k++) await clue(al[(st + k) % al.length], r);
     await discuss();
     const out = await vote();
+    roundsPlayed++;
+    if (!me.imp && lastHumanVote?.imp) correctReads++;
     if (!out) {
       log("", "Ninguém foi eliminado. Nova rodada!", "s");
       say(me, "…", 0);
@@ -370,9 +640,19 @@ async function play() {
       const innWin = out.imp;
       playing = false;
       const won = innWin !== me.imp;
+      profile.games++;
+      profile.totalRounds += roundsPlayed;
+      if (won) profile.wins++;
+      if (won && me.imp) profile.impostorWins++;
+      if (won && !me.imp && me.alive) profile.survivorWins++;
+      if (out.imp && !me.imp) profile.caughtImpostors++;
+      const reward = 10 + roundsPlayed * 3 + correctReads * 6 + (won ? 25 : 0) + (me.alive ? 5 : 0);
+      profile.coins += reward;
+      const newTitles = unlockTitles();
+      saveProfile();
       $("#et").textContent = won ? "🎉 Você venceu!" : "😵 Você perdeu";
       $("#ed").textContent =
-        `${innWin ? "Os inocentes descobriram" : "O impostor enganou todos:"} ${P.find((p) => p.imp).name}. Palavra: ${W.w} (${theme}).`;
+        `${innWin ? "Os inocentes descobriram" : "O impostor enganou todos:"} ${P.find((p) => p.imp).name}. Palavra: ${W.w} (${theme}). Recompensa da partida: 🪙 ${reward} moedas${newTitles.length ? ` · Novo título: ${newTitles.join(", ")}` : ""}.`;
       show("end");
       return;
     }
