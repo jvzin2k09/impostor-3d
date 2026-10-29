@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Impostor 3D</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <canvas id="c"></canvas>
+    <div id="menu" class="card">
+        <h1>🕵️ Impostor</h1>
+        <p>Descubra quem é o infiltrado!</p>
+        <input id="nm" placeholder="Seu nome" maxlength="12">
+        <button id="mk">Criar sala</button>
+        <div class="row"><input id="cd" placeholder="Código" maxlength="4" style="text-transform:uppercase"><button
+                id="jn" class="alt">Entrar</button></div>
+        <p>Modo offline com bots. Online em breve!</p>
+    </div>
+    <div id="lobby" class="card" hidden>
+        <p>Código da sala</p>
+        <div class="code" id="rc"></div>
+        <div id="pl"></div><label>Bots na sala: <b id="bn">5</b><br><input id="bs" type="range" min="3" max="7"
+                value="5" style="width:100%"></label>
+        <button id="go">Iniciar jogo</button><button id="bk" class="alt">Voltar</button>
+    </div>
+    <div id="hud" hidden>
+        <div>
+            <div id="top"><span id="st"></span><span id="tm"></span></div>
+            <div id="word"></div>
+        </div>
+        <div id="bot">
+            <div id="log"></div>
+            <div id="act"></div>
+        </div>
+    </div>
+    <div id="end" class="card" hidden>
+        <h2 id="et"></h2>
+        <p id="ed"></p><button id="ag">Jogar de novo</button><button id="mn" class="alt">Menu</button>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="data.js"></script>
+    <script src="scene.js"></script>
+    <script src="game.js"></script>
+</body> 
+
+</html>

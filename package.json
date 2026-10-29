@@ -1,0 +1,16 @@
+{
+  "name": "impostor-3d",
+  "version": "1.0.0",
+  "description": "Jogo de palavras em 3D (Three.js) com bots.",
+  "main": "data.js",
+  "scripts": {
+  "dev": "npx serve ."
+},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "three": "^0.128.0"
+  }
+}
